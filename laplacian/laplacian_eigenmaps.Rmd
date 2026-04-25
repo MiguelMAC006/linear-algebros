@@ -1,0 +1,18 @@
+---
+title: "Laplacian Eigenmaps & Spectral Dimensionality Reduction"
+subtitle: "Linear Algebros — Public Transit Usage"
+author: "Lucian Mikush & Michael Andrade Maldonado"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Data
+
+```{r}
+# Shared cleaned dataset (wide format, 35 cities × 24 features + Transit target)
+df <- read.csv("../data/cities_features_2019.csv", row.names = 1)
+```
