@@ -28,7 +28,7 @@ linear-algebros/
 ├── data/
 │   ├── BigCitiesHealth.csv          # raw BCHI dataset (original)
 │   └── cities_features_2019.csv     # cleaned wide-format pivot (2019 snapshot)
-├── pca/                             # Devki & Nacho — R
+├── pca/                             # Devki & Ignacio — R
 │   ├── pca_analysis.Rmd
 │   └── outputs/
 ├── laplacian/                       # Lucian & Michael — R
@@ -88,7 +88,7 @@ The cleaned, wide-format dataset (`data/cities_features_2019.csv`) is the starti
 
 ## Sections
 
-### 1. PCA & Descriptive Visualization (`pca/`) — Devki & Nacho
+### 1. PCA & Descriptive Visualization (`pca/`) — Devki & Ignacio
 - Project cities onto top 2 principal components
 - Color points by public transit usage percentage
 - Interpret loadings to identify which features drive the PCs
@@ -115,7 +115,7 @@ python supervised_learning.py
 # outputs saved to supervised/outputs/
 ```
 
-### R (Devki, Nacho, Lucian, Michael)
+### R (Devki, Ignacio, Lucian, Michael)
 Open `linear-algebros.Rproj` in RStudio, then:
 ```r
 renv::restore()   # installs all R packages from renv.lock
