@@ -11,6 +11,7 @@ Dataset: Big Cities Health Inventory  (bigcitieshealthdata.org)
 # =============================================================================
 # 0. Imports
 # =============================================================================
+import os
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -20,7 +21,7 @@ import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 import seaborn as sns
 
-from sklearn.linear_model import LinearRegression, Ridge, Lasso
+from sklearn.linear_model import LinearRegression
 from sklearn.neighbors import KNeighborsRegressor
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
@@ -35,79 +36,41 @@ SEED = 42
 np.random.seed(SEED)
 
 # =============================================================================
-# 1. Data Loading & Pivoting
+# 1. Data Loading
 # =============================================================================
 
-RAW_PATH = "/mnt/user-data/uploads/BigCitiesHealth.csv"
+_HERE    = os.path.dirname(os.path.abspath(__file__))
+DATA_PATH = os.path.join(_HERE, "..", "data", "cities_features_2019.csv")
+OUT_DIR   = os.path.join(_HERE, "outputs")
 
-# --- feature map: descriptive name → exact metric_item_label in dataset ---
-FEATURE_MAP = {
-    "People with Disabilities":             "People with Disabilities",
-    "Adult Physical Inactivity":            "Adult Physical Inactivity",
-    "Life Expectancy":                      "Life Expectancy",
-    "Homicides":                            "Homicides",
-    "Violent Crime":                        "Violent Crime",
-    "Unemployment":                         "Unemployment",
-    "Public Assistance":                    "Public Assistance",
-    "Service Workers":                      "Service Workers",
-    "Excessive Housing Cost":               "Excessive Housing Cost",
-    "Income Inequality":                    "Income Inequality",
-    "Racial Segregation (White/Non-White)": "Racial Segregation, White and Non-White",
-    "Limited Internet Access":              "Limited Internet Access",
-    "College Graduates":                    "College Graduates",
-    "Renters vs. Owners":                   "Renters vs. Owners",
-    "Longer Summers":                       "Longer Summers",
-    "Poor Air Quality":                     "Poor Air Quality",
-    "Longer Driving Commute Time":          "Longer Driving Commute Time",
-    "Walking to Work":                      "Walking to Work",       # proxy for Walkability
-    "Riding Bike to Work":                  "Riding Bike to Work",   # proxy for Bikeability
-    "Limited Supermarket Access":           "Limited Supermarket Access",
-    "Foreign Born Population":              "Foreign Born Population",
-    "Per-capita Household Income":          "Per-capita Household Income",
-    "Population Density":                   "Population Density",
-    "Uninsured (All Ages)":                 "Uninsured, All Ages",
-}
+FEATURE_COLS = [
+    "People with Disabilities", "Adult Physical Inactivity", "Life Expectancy",
+    "Homicides", "Violent Crime", "Unemployment", "Public Assistance",
+    "Service Workers", "Excessive Housing Cost", "Income Inequality",
+    "Racial Segregation (White/Non-White)", "Limited Internet Access",
+    "College Graduates", "Renters vs. Owners", "Longer Summers", "Poor Air Quality",
+    "Longer Driving Commute Time", "Walking to Work", "Riding Bike to Work",
+    "Limited Supermarket Access", "Foreign Born Population",
+    "Per-capita Household Income", "Population Density", "Uninsured (All Ages)",
+]
 
-TARGET_METRIC = "Public Transportation Use"
-
-# Year to use for the cross-sectional snapshot
-# 2019 is the last "normal" pre-COVID year with near-complete coverage
-SNAPSHOT_YEAR = 2019
-
-print("Loading raw data …")
-df_raw = pd.read_csv(RAW_PATH, low_memory=False)
-
-def extract_metric(df, metric_label, year=SNAPSHOT_YEAR):
-    """Return city → value Series for a given metric/year (All race, Both sex)."""
-    mask = (
-        (df["metric_item_label"] == metric_label) &
-        (df["date_label"] == year) &
-        (df["strata_race_label"] == "All") &
-        (df["strata_sex_label"] == "Both") &
-        (df["geo_label_citystate"] != "U.S. Total")
-    )
-    sub = df.loc[mask, ["geo_label_citystate", "value"]].dropna()
-    # If a city appears more than once (shouldn't happen for All/Both), take mean
-    return sub.groupby("geo_label_citystate")["value"].mean()
-
-# Build feature matrix
-frames = {}
-for feat_name, metric_label in FEATURE_MAP.items():
-    frames[feat_name] = extract_metric(df_raw, metric_label)
-
-frames["Public Transportation Use"] = extract_metric(df_raw, TARGET_METRIC)
-
-df_wide = pd.DataFrame(frames).dropna()   # keep only cities with full data
-print(f"\nSnapshot year : {SNAPSHOT_YEAR}")
-print(f"Cities retained (no missing): {len(df_wide)}")
-print(f"Features: {len(FEATURE_MAP)}\n")
+print("Loading data …")
+df_wide = pd.read_csv(DATA_PATH, index_col=0).rename(columns={
+    "People w/ Disabilities":  "People with Disabilities",
+    "Racial Seg W/NW":         "Racial Segregation (White/Non-White)",
+    "Renters vs Owners":       "Renters vs. Owners",
+    "Longer Driving Commute":  "Longer Driving Commute Time",
+    "Foreign Born Pop":        "Foreign Born Population",
+    "Per-capita HH Income":    "Per-capita Household Income",
+    "Uninsured All Ages":      "Uninsured (All Ages)",
+    "Transit":                 "Public Transportation Use",
+})
+print(f"Cities: {len(df_wide)}   Features: {len(FEATURE_COLS)}\n")
 print(df_wide[["Public Transportation Use"]].sort_values("Public Transportation Use", ascending=False).to_string())
 
 # =============================================================================
 # 2. Feature Matrix & Target
 # =============================================================================
-
-FEATURE_COLS = list(FEATURE_MAP.keys())
 
 X_raw = df_wide[FEATURE_COLS].values
 y     = df_wide["Public Transportation Use"].values
@@ -147,7 +110,7 @@ def kfold_eval(model, X, y, k=5, model_name=""):
     return rmse_scores, r2_scores
 
 # =============================================================================
-# 4. MODEL A – Linear Regression (OLS, Ridge, Lasso)
+# 4. MODEL A – Linear Regression (OLS)
 # =============================================================================
 print("\n" + "="*65)
 print("MODEL A: Linear Regression")
@@ -161,34 +124,10 @@ print(f"\n  OLS in-sample  R² = {r2_score(y, y_ols_full):.3f}")
 
 ols_rmse, ols_r2, ols_preds = loo_eval(LinearRegression(), X_scaled, y, "OLS")
 
-# --- 4b. Ridge (alpha tuned via LOO) ---
-alphas = np.logspace(-2, 4, 40)
-ridge_scores = []
-for a in alphas:
-    _, r2_a, _ = loo_eval(Ridge(alpha=a), X_scaled, y, f"Ridge α={a:.3f}")
-    ridge_scores.append(r2_a)
-best_ridge_alpha = alphas[np.argmax(ridge_scores)]
-ridge = Ridge(alpha=best_ridge_alpha)
-ridge_rmse, ridge_r2, ridge_preds = loo_eval(ridge, X_scaled, y, f"Ridge (α={best_ridge_alpha:.3f})")
-
-# --- 4c. Lasso (alpha tuned via LOO) ---
-lasso_scores = []
-for a in alphas:
-    _, r2_a, _ = loo_eval(Lasso(alpha=a, max_iter=10000), X_scaled, y, f"Lasso α={a:.3f}")
-    lasso_scores.append(r2_a)
-best_lasso_alpha = alphas[np.argmax(lasso_scores)]
-lasso = Lasso(alpha=best_lasso_alpha, max_iter=10000)
-lasso_rmse, lasso_r2, lasso_preds = loo_eval(lasso, X_scaled, y, f"Lasso (α={best_lasso_alpha:.3f})")
-
-print(f"\n  Best Ridge α : {best_ridge_alpha:.4f}")
-print(f"  Best Lasso α : {best_lasso_alpha:.4f}")
-
 # OLS coefficients
-ridge.fit(X_scaled, y)
 coef_df = pd.DataFrame({
-    "Feature": FEATURE_COLS,
-    "OLS Coef":   ols.coef_,
-    "Ridge Coef": ridge.coef_,
+    "Feature":  FEATURE_COLS,
+    "OLS Coef": ols.coef_,
 }).sort_values("OLS Coef", key=abs, ascending=False)
 print("\n  Top-10 OLS coefficients (absolute value):")
 print(coef_df.head(10).to_string(index=False))
@@ -262,10 +201,9 @@ print("\n" + "="*65)
 print("SUMMARY: LOO CV Performance")
 print("="*65)
 summary = pd.DataFrame({
-    "Model":     ["OLS", f"Ridge (α={best_ridge_alpha:.4f})", f"Lasso (α={best_lasso_alpha:.4f})",
-                  f"KNN (k={best_k})", "Random Forest"],
-    "LOO-RMSE":  [ols_rmse, ridge_rmse, lasso_rmse, knn_rmse, rf_rmse],
-    "LOO-R²":    [ols_r2,   ridge_r2,   lasso_r2,   knn_r2,   rf_r2],
+    "Model":    ["OLS", f"KNN (k={best_k})", "Random Forest"],
+    "LOO-RMSE": [ols_rmse, knn_rmse, rf_rmse],
+    "LOO-R²":   [ols_r2,   knn_r2,   rf_r2],
 })
 print(summary.to_string(index=False))
 
@@ -306,19 +244,17 @@ def city_color(city):
     region = REGION.get(city, "Other")
     return REGION_COLORS[region]
 
-fig, axes = plt.subplots(2, 3, figsize=(18, 11))
+fig, axes = plt.subplots(1, 4, figsize=(22, 6))
 fig.suptitle("Supervised Learning: Predicting Public Transit Use\nLinear Algebros — Miguel Cuevas", fontsize=14, fontweight="bold")
 
 # --- 8a. Actual vs Predicted for each model ---
 model_preds = {
-    "OLS":            ols_preds,
-    f"Ridge":         ridge_preds,
-    f"Lasso":         lasso_preds,
+    "OLS":               ols_preds,
     f"KNN (k={best_k})": knn_preds,
-    "Random Forest":  rf_preds,
+    "Random Forest":     rf_preds,
 }
 
-ax_pairs = [axes[0,0], axes[0,1], axes[0,2], axes[1,0], axes[1,1]]
+ax_pairs = [axes[0], axes[1], axes[2]]
 for ax, (mname, preds) in zip(ax_pairs, model_preds.items()):
     colors = [city_color(c) for c in cities]
     ax.scatter(y, preds, c=colors, s=60, edgecolors="k", linewidths=0.4, zorder=3)
@@ -333,7 +269,7 @@ for ax, (mname, preds) in zip(ax_pairs, model_preds.items()):
     r2_val = 1 - ss_res/ss_tot
     ax.set_xlabel("Actual % Public Transit Use", fontsize=9)
     ax.set_ylabel("LOO-Predicted %", fontsize=9)
-    ax.set_title(f"{mname}\nLOO-RMSE={rmse_val:.2f}, R²={r2_loo:.3f}", fontsize=9)
+    ax.set_title(f"{mname}\nLOO-RMSE={rmse_val:.2f}, R²={r2_val:.3f}", fontsize=9)
     ax.grid(alpha=0.3)
     # region legend once
     if mname == "OLS":
@@ -342,12 +278,12 @@ for ax, (mname, preds) in zip(ax_pairs, model_preds.items()):
         ax.legend(handles=handles, fontsize=6, loc="upper left", framealpha=0.7)
 
 # --- 8b. Model comparison bar chart ---
-ax6 = axes[1,2]
-model_names_short = ["OLS", "Ridge", "Lasso", f"KNN\n(k={best_k})", "RF"]
-rmse_vals = [ols_rmse, ridge_rmse, lasso_rmse, knn_rmse, rf_rmse]
-r2_vals   = [ols_r2,   ridge_r2,   lasso_r2,   knn_r2,   rf_r2]
+ax6 = axes[3]
+model_names_short = ["OLS", f"KNN\n(k={best_k})", "RF"]
+rmse_vals = [ols_rmse, knn_rmse, rf_rmse]
+r2_vals   = [ols_r2,   knn_r2,   rf_r2]
 x_pos = np.arange(len(model_names_short))
-bars = ax6.bar(x_pos, rmse_vals, color=["#4c72b0","#55a868","#c44e52","#8172b2","#ccb974"],
+bars = ax6.bar(x_pos, rmse_vals, color=["#4c72b0","#8172b2","#ccb974"],
                edgecolor="k", linewidth=0.6, width=0.55)
 ax6.set_xticks(x_pos)
 ax6.set_xticklabels(model_names_short, fontsize=9)
@@ -359,7 +295,7 @@ for bar, r2v in zip(bars, r2_vals):
              f"R²={r2v:.2f}", ha="center", va="bottom", fontsize=7.5)
 
 plt.tight_layout()
-plt.savefig("/mnt/user-data/outputs/miguel_actual_vs_predicted.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(OUT_DIR, "miguel_actual_vs_predicted.png"), dpi=150, bbox_inches="tight")
 plt.close()
 print("\nSaved: miguel_actual_vs_predicted.png")
 
@@ -396,7 +332,7 @@ ax.set_title("OLS Coefficients\n(standardized)", fontsize=10)
 ax.grid(axis="x", alpha=0.3)
 
 plt.tight_layout()
-plt.savefig("/mnt/user-data/outputs/miguel_feature_importance.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(OUT_DIR, "miguel_feature_importance.png"), dpi=150, bbox_inches="tight")
 plt.close()
 print("Saved: miguel_feature_importance.png")
 
@@ -410,29 +346,11 @@ ax.set_title("KNN: Choosing k via Leave-One-Out CV", fontsize=11)
 ax.legend(fontsize=9)
 ax.grid(alpha=0.3)
 plt.tight_layout()
-plt.savefig("/mnt/user-data/outputs/miguel_knn_k_selection.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(OUT_DIR, "miguel_knn_k_selection.png"), dpi=150, bbox_inches="tight")
 plt.close()
 print("Saved: miguel_knn_k_selection.png")
 
-# --- 8e. Ridge/Lasso alpha tuning ---
-fig, axes3 = plt.subplots(1, 2, figsize=(12, 4))
-for ax, scores, best_a, label, color in [
-    (axes3[0], ridge_scores, best_ridge_alpha, "Ridge", "#55a868"),
-    (axes3[1], lasso_scores, best_lasso_alpha, "Lasso", "#c44e52"),
-]:
-    ax.semilogx(alphas, scores, "o-", color=color, lw=2, ms=4)
-    ax.axvline(best_a, color="k", lw=1.5, linestyle="--", label=f"Best α={best_a:.4f}")
-    ax.set_xlabel("α (regularization strength)", fontsize=10)
-    ax.set_ylabel("LOO-R²", fontsize=10)
-    ax.set_title(f"{label}: Choosing α via LOO CV", fontsize=11)
-    ax.legend(fontsize=9)
-    ax.grid(alpha=0.3)
-plt.tight_layout()
-plt.savefig("/mnt/user-data/outputs/miguel_regularization_tuning.png", dpi=150, bbox_inches="tight")
-plt.close()
-print("Saved: miguel_regularization_tuning.png")
-
-# --- 8f. Correlation heatmap of features vs target ---
+# --- 8e. Correlation heatmap of features vs target ---
 corr_data = df_wide[FEATURE_COLS + ["Public Transportation Use"]].corr()
 target_corr = corr_data["Public Transportation Use"].drop("Public Transportation Use").sort_values()
 fig, ax = plt.subplots(figsize=(8, 8))
@@ -443,13 +361,9 @@ ax.set_xlabel("Pearson Correlation with Public Transit Use", fontsize=10)
 ax.set_title("Feature Correlations with Target Variable\n(Public Transportation Use %)", fontsize=11)
 ax.grid(axis="x", alpha=0.3)
 plt.tight_layout()
-plt.savefig("/mnt/user-data/outputs/miguel_feature_correlations.png", dpi=150, bbox_inches="tight")
+plt.savefig(os.path.join(OUT_DIR, "miguel_feature_correlations.png"), dpi=150, bbox_inches="tight")
 plt.close()
 print("Saved: miguel_feature_correlations.png")
 
-# --- 8g. Save cleaned wide-format data for teammates ---
-df_wide.to_csv("/mnt/user-data/outputs/cities_features_2019.csv")
-print("Saved: cities_features_2019.csv  (pivot table for teammates)")
-
-print("\n✓ All outputs written to /mnt/user-data/outputs/")
+print(f"\n✓ All outputs written to {OUT_DIR}")
 print("\nDone.")

@@ -26,7 +26,6 @@ We predict the percentage of commuters using public transportation across 35 maj
 ```
 linear-algebros/
 ├── data/
-│   ├── BigCitiesHealth.csv          # raw BCHI dataset (original)
 │   └── cities_features_2019.csv     # cleaned wide-format pivot (2019 snapshot)
 ├── pca/                             # Devki & Ignacio — R
 │   ├── pca_analysis.Rmd
@@ -99,9 +98,9 @@ The cleaned, wide-format dataset (`data/cities_features_2019.csv`) is the starti
 - Compare embedding structure to PCA
 
 ### 3. Supervised Learning (`supervised/`) — Miguel
-- **Models:** OLS, Ridge, Lasso, KNN, Random Forest
+- **Models:** Linear Regression (OLS), KNN, Random Forest
 - **Evaluation:** Leave-One-Out CV (LOO) — chosen because n = 35
-- **Best model:** Ridge regression (LOO-R² = 0.801, LOO-RMSE = 4.18 pp)
+- **Best model:** OLS (LOO-R² = 0.750, LOO-RMSE = 4.67 pp)
 
 ---
 
@@ -128,5 +127,5 @@ Then knit the relevant `.Rmd` file.
 
 - **Population density** is by far the strongest predictor of transit use (r = 0.95)
 - **Northeast cities** (NYC, Boston, DC, SF) cluster at high transit use; **Southern and Western cities** cluster at low use — consistent with our hypothesis
-- **Ridge regression** outperforms all other models under LOO-CV, confirming that regularization is essential with n = 35 and p = 24
-- Tree-based methods (Random Forest) underperform on this small dataset
+- **OLS** outperforms KNN and Random Forest under LOO-CV (LOO-R² = 0.750), suggesting the relationship between features and transit use is largely linear
+- Tree-based methods (Random Forest) underperform on this small dataset (n = 35)
